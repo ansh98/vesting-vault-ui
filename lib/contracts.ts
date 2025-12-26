@@ -1,0 +1,9 @@
+// lib/contracts.ts
+
+export const VESTING_VAULT_ADDRESS =
+  "0xD7cBf62e9aBa341FC256226467965008251104F5";
+
+export const TOKEN_ADDRESS =
+  "0x8C7248cE4ab4111fca37F302C18BFBCc760A2023";
+
+export const CHAIN_ID = 11155111; // Sepolia

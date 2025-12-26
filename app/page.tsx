@@ -1,65 +1,200 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useState } from "react";
+import {
+  useAccount,
+  useReadContract,
+  useWriteContract,
+} from "wagmi";
+import { parseUnits } from "viem";
+import { vestingVaultAbi } from "@/lib/vestingVaultAbi";
+
+const VESTING_VAULT_ADDRESS =
+  "0xd7cbf62e9aba341fc256226467965008251104f5";
+
+export default function Page() {
+  const { address, isConnected } = useAccount();
+
+  const [beneficiary, setBeneficiary] = useState("");
+  const [totalTokens, setTotalTokens] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [cliffDate, setCliffDate] = useState("");
+  const [duration, setDuration] = useState("");
+  const [revocable, setRevocable] = useState(true);
+  const [scheduleId, setScheduleId] = useState("0");
+
+  const { writeContract, isPending } = useWriteContract();
+
+  /* ---------------- READ CONTRACT ---------------- */
+
+  const { data: feeBps } = useReadContract({
+    address: VESTING_VAULT_ADDRESS,
+    abi: vestingVaultAbi,
+    functionName: "feeBps",
+  });
+
+  const { data: claimable } = useReadContract({
+    address: VESTING_VAULT_ADDRESS,
+    abi: vestingVaultAbi,
+    functionName: "previewClaimable",
+    args: address ? [address, BigInt(scheduleId)] : undefined,
+  });
+
+  /* ---------------- WRITE CONTRACT ---------------- */
+
+  const handleCreateSchedule = () => {
+    if (
+      !beneficiary ||
+      !totalTokens ||
+      !startDate ||
+      !cliffDate ||
+      !duration
+    ) {
+      alert("Fill all fields");
+      return;
+    }
+
+    const startTimestamp = Math.floor(
+      new Date(startDate).getTime() / 1000
+    );
+    const cliffTimestamp = Math.floor(
+      new Date(cliffDate).getTime() / 1000
+    );
+
+    if (cliffTimestamp < startTimestamp) {
+      alert("Cliff must be after start");
+      return;
+    }
+
+    writeContract({
+      address: VESTING_VAULT_ADDRESS,
+      abi: vestingVaultAbi,
+      functionName: "createSchedule",
+      args: [
+        beneficiary,
+        BigInt(startTimestamp),
+        BigInt(cliffTimestamp),
+        BigInt(duration),
+        parseUnits(totalTokens, 18),
+        revocable,
+      ],
+    });
+  };
+
+  const handleClaim = () => {
+    writeContract({
+      address: VESTING_VAULT_ADDRESS,
+      abi: vestingVaultAbi,
+      functionName: "claim",
+      args: [address!, BigInt(scheduleId)],
+    });
+  };
+
+  /* ---------------- UI ---------------- */
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <main style={{ padding: 24 }}>
+      <h1>Vesting Vault (Sepolia)</h1>
+
+      {!isConnected && <p>Connect wallet</p>}
+
+      {isConnected && (
+        <>
+          <p>
+            <strong>Wallet:</strong> {address}
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+          <p>
+            <strong>Contract:</strong> {VESTING_VAULT_ADDRESS}
+          </p>
+          <p>
+            <strong>Fee:</strong> {feeBps?.toString()} bps
+          </p>
+
+          <hr />
+
+          <h2>Create Vesting Schedule (Admin)</h2>
+
+          <input
+            placeholder="Beneficiary address"
+            value={beneficiary}
+            onChange={(e) => setBeneficiary(e.target.value)}
+          />
+          <br />
+
+          <input
+            placeholder="Total tokens (e.g. 100)"
+            value={totalTokens}
+            onChange={(e) => setTotalTokens(e.target.value)}
+          />
+          <br />
+
+          <label>Start date</label>
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+          />
+          <br />
+
+          <label>Cliff date</label>
+          <input
+            type="date"
+            value={cliffDate}
+            onChange={(e) => setCliffDate(e.target.value)}
+          />
+          <br />
+
+          <input
+            placeholder="Duration (seconds)"
+            value={duration}
+            onChange={(e) => setDuration(e.target.value)}
+          />
+          <br />
+
+          <label>
+            <input
+              type="checkbox"
+              checked={revocable}
+              onChange={(e) => setRevocable(e.target.checked)}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+            Revocable
+          </label>
+
+          <br />
+          <br />
+
+          <button onClick={handleCreateSchedule} disabled={isPending}>
+            {isPending ? "Creating..." : "Create Schedule"}
+          </button>
+
+          <hr />
+
+          <h2>Claim Tokens</h2>
+
+          <input
+            placeholder="Schedule ID"
+            value={scheduleId}
+            onChange={(e) => setScheduleId(e.target.value)}
+          />
+          <br />
+
+          <p>
+            <strong>Claimable:</strong>{" "}
+            {claimable ? claimable.toString() : "0"} tokens
+          </p>
+
+          {claimable === 0n && (
+            <p style={{ opacity: 0.7 }}>
+              No tokens available. Vesting may be fully claimed or cliff not
+              reached.
+            </p>
+          )}
+
+          <button onClick={handleClaim} disabled={isPending}>
+            Claim
+          </button>
+        </>
+      )}
+    </main>
   );
 }
