@@ -1,11 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  useAccount,
-  useReadContract,
-  useWriteContract,
-} from "wagmi";
+import { useAccount, useReadContract, useWriteContract } from "wagmi";
 import { parseUnits } from "viem";
 import { vestingVaultAbi } from "@/lib/vestingVaultAbi";
 
@@ -14,6 +10,7 @@ const VESTING_VAULT_ADDRESS =
 
 export default function Page() {
   const { address, isConnected } = useAccount();
+  const { writeContract, isPending } = useWriteContract();
 
   const [beneficiary, setBeneficiary] = useState("");
   const [totalTokens, setTotalTokens] = useState("");
@@ -22,10 +19,6 @@ export default function Page() {
   const [duration, setDuration] = useState("");
   const [revocable, setRevocable] = useState(true);
   const [scheduleId, setScheduleId] = useState("0");
-
-  const { writeContract, isPending } = useWriteContract();
-
-  /* ---------------- READ CONTRACT ---------------- */
 
   const { data: feeBps } = useReadContract({
     address: VESTING_VAULT_ADDRESS,
@@ -40,31 +33,14 @@ export default function Page() {
     args: address ? [address, BigInt(scheduleId)] : undefined,
   });
 
-  /* ---------------- WRITE CONTRACT ---------------- */
-
   const handleCreateSchedule = () => {
-    if (
-      !beneficiary ||
-      !totalTokens ||
-      !startDate ||
-      !cliffDate ||
-      !duration
-    ) {
+    if (!beneficiary || !totalTokens || !startDate || !cliffDate || !duration) {
       alert("Fill all fields");
       return;
     }
 
-    const startTimestamp = Math.floor(
-      new Date(startDate).getTime() / 1000
-    );
-    const cliffTimestamp = Math.floor(
-      new Date(cliffDate).getTime() / 1000
-    );
-
-    if (cliffTimestamp < startTimestamp) {
-      alert("Cliff must be after start");
-      return;
-    }
+    const start = Math.floor(new Date(startDate).getTime() / 1000);
+    const cliff = Math.floor(new Date(cliffDate).getTime() / 1000);
 
     writeContract({
       address: VESTING_VAULT_ADDRESS,
@@ -72,8 +48,8 @@ export default function Page() {
       functionName: "createSchedule",
       args: [
         beneficiary,
-        BigInt(startTimestamp),
-        BigInt(cliffTimestamp),
+        BigInt(start),
+        BigInt(cliff),
         BigInt(duration),
         parseUnits(totalTokens, 18),
         revocable,
@@ -90,8 +66,6 @@ export default function Page() {
     });
   };
 
-  /* ---------------- UI ---------------- */
-
   return (
     <main style={{ padding: 24 }}>
       <h1>Vesting Vault (Sepolia)</h1>
@@ -100,71 +74,28 @@ export default function Page() {
 
       {isConnected && (
         <>
-          <p>
-            <strong>Wallet:</strong> {address}
-          </p>
-          <p>
-            <strong>Contract:</strong> {VESTING_VAULT_ADDRESS}
-          </p>
-          <p>
-            <strong>Fee:</strong> {feeBps?.toString()} bps
-          </p>
+          <p><strong>Wallet:</strong> {address}</p>
+          <p><strong>Contract:</strong> {VESTING_VAULT_ADDRESS}</p>
+          <p><strong>Fee:</strong> {feeBps?.toString()} bps</p>
 
           <hr />
 
           <h2>Create Vesting Schedule (Admin)</h2>
 
-          <input
-            placeholder="Beneficiary address"
-            value={beneficiary}
-            onChange={(e) => setBeneficiary(e.target.value)}
-          />
-          <br />
-
-          <input
-            placeholder="Total tokens (e.g. 100)"
-            value={totalTokens}
-            onChange={(e) => setTotalTokens(e.target.value)}
-          />
-          <br />
-
-          <label>Start date</label>
-          <input
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-          />
-          <br />
-
-          <label>Cliff date</label>
-          <input
-            type="date"
-            value={cliffDate}
-            onChange={(e) => setCliffDate(e.target.value)}
-          />
-          <br />
-
-          <input
-            placeholder="Duration (seconds)"
-            value={duration}
-            onChange={(e) => setDuration(e.target.value)}
-          />
-          <br />
+          <input placeholder="Beneficiary" onChange={e => setBeneficiary(e.target.value)} />
+          <input placeholder="Total tokens" onChange={e => setTotalTokens(e.target.value)} />
+          <input type="date" onChange={e => setStartDate(e.target.value)} />
+          <input type="date" onChange={e => setCliffDate(e.target.value)} />
+          <input placeholder="Duration (seconds)" onChange={e => setDuration(e.target.value)} />
 
           <label>
-            <input
-              type="checkbox"
-              checked={revocable}
-              onChange={(e) => setRevocable(e.target.checked)}
-            />
+            <input type="checkbox" checked={revocable} onChange={e => setRevocable(e.target.checked)} />
             Revocable
           </label>
 
-          <br />
-          <br />
-
+          <br /><br />
           <button onClick={handleCreateSchedule} disabled={isPending}>
-            {isPending ? "Creating..." : "Create Schedule"}
+            Create Schedule
           </button>
 
           <hr />
@@ -174,19 +105,14 @@ export default function Page() {
           <input
             placeholder="Schedule ID"
             value={scheduleId}
-            onChange={(e) => setScheduleId(e.target.value)}
+            onChange={e => setScheduleId(e.target.value)}
           />
-          <br />
 
-          <p>
-            <strong>Claimable:</strong>{" "}
-            {claimable ? claimable.toString() : "0"} tokens
-          </p>
+          <p>Claimable: {claimable?.toString() ?? "0"} tokens</p>
 
           {claimable === 0n && (
             <p style={{ opacity: 0.7 }}>
-              No tokens available. Vesting may be fully claimed or cliff not
-              reached.
+              No tokens available. Vesting may be fully claimed or cliff not reached.
             </p>
           )}
 
