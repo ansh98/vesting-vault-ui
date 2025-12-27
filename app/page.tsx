@@ -3,14 +3,15 @@
 import { useState } from "react";
 import { useAccount, useReadContract, useWriteContract } from "wagmi";
 import { parseUnits } from "viem";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+
 import { vestingVaultAbi } from "@/lib/vestingVaultAbi";
 
 const VESTING_VAULT_ADDRESS =
-  "0xd7cbf62e9aba341fc256226467965008251104f5";
+  "0xd7cbf62e9aba341fc256226467965008251104f5" as const;
 
 export default function Page() {
   const { address, isConnected } = useAccount();
-  const { writeContract, isPending } = useWriteContract();
 
   const [beneficiary, setBeneficiary] = useState("");
   const [totalTokens, setTotalTokens] = useState("");
@@ -18,7 +19,8 @@ export default function Page() {
   const [cliffDate, setCliffDate] = useState("");
   const [duration, setDuration] = useState("");
   const [revocable, setRevocable] = useState(true);
-  const [scheduleId, setScheduleId] = useState("0");
+
+  const { writeContract, isPending } = useWriteContract();
 
   const { data: feeBps } = useReadContract({
     address: VESTING_VAULT_ADDRESS,
@@ -26,30 +28,38 @@ export default function Page() {
     functionName: "feeBps",
   });
 
-  const { data: claimable } = useReadContract({
-    address: VESTING_VAULT_ADDRESS,
-    abi: vestingVaultAbi,
-    functionName: "previewClaimable",
-    args: address ? [address, BigInt(scheduleId)] : undefined,
-  });
-
   const handleCreateSchedule = () => {
-    if (!beneficiary || !totalTokens || !startDate || !cliffDate || !duration) {
+    if (
+      !beneficiary ||
+      !totalTokens ||
+      !startDate ||
+      !cliffDate ||
+      !duration
+    ) {
       alert("Fill all fields");
       return;
     }
 
-    const start = Math.floor(new Date(startDate).getTime() / 1000);
-    const cliff = Math.floor(new Date(cliffDate).getTime() / 1000);
+    const startTimestamp = Math.floor(
+      new Date(startDate).getTime() / 1000
+    );
+    const cliffTimestamp = Math.floor(
+      new Date(cliffDate).getTime() / 1000
+    );
+
+    if (cliffTimestamp < startTimestamp) {
+      alert("Cliff must be after start");
+      return;
+    }
 
     writeContract({
       address: VESTING_VAULT_ADDRESS,
       abi: vestingVaultAbi,
       functionName: "createSchedule",
       args: [
-        beneficiary,
-        BigInt(start),
-        BigInt(cliff),
+        beneficiary as `0x${string}`,
+        BigInt(startTimestamp),
+        BigInt(cliffTimestamp),
         BigInt(duration),
         parseUnits(totalTokens, 18),
         revocable,
@@ -57,67 +67,84 @@ export default function Page() {
     });
   };
 
-  const handleClaim = () => {
-    writeContract({
-      address: VESTING_VAULT_ADDRESS,
-      abi: vestingVaultAbi,
-      functionName: "claim",
-      args: [address!, BigInt(scheduleId)],
-    });
-  };
-
   return (
-    <main style={{ padding: 24 }}>
+    <main style={{ padding: 24, maxWidth: 600 }}>
       <h1>Vesting Vault (Sepolia)</h1>
 
-      {!isConnected && <p>Connect wallet</p>}
+      <ConnectButton />
 
       {isConnected && (
         <>
-          <p><strong>Wallet:</strong> {address}</p>
-          <p><strong>Contract:</strong> {VESTING_VAULT_ADDRESS}</p>
-          <p><strong>Fee:</strong> {feeBps?.toString()} bps</p>
+          <p>
+            <strong>Wallet:</strong> {address}
+          </p>
+          <p>
+            <strong>Contract:</strong> {VESTING_VAULT_ADDRESS}
+          </p>
+          <p>
+            <strong>Fee:</strong> {feeBps?.toString()} bps
+          </p>
 
           <hr />
 
           <h2>Create Vesting Schedule (Admin)</h2>
 
-          <input placeholder="Beneficiary" onChange={e => setBeneficiary(e.target.value)} />
-          <input placeholder="Total tokens" onChange={e => setTotalTokens(e.target.value)} />
-          <input type="date" onChange={e => setStartDate(e.target.value)} />
-          <input type="date" onChange={e => setCliffDate(e.target.value)} />
-          <input placeholder="Duration (seconds)" onChange={e => setDuration(e.target.value)} />
+          <input
+            placeholder="Beneficiary address"
+            value={beneficiary}
+            onChange={(e) => setBeneficiary(e.target.value)}
+          />
+
+          <br />
+
+          <input
+            placeholder="Total tokens (e.g. 100)"
+            value={totalTokens}
+            onChange={(e) => setTotalTokens(e.target.value)}
+          />
+
+          <br />
+
+          <label>Start date</label>
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+          />
+
+          <br />
+
+          <label>Cliff date</label>
+          <input
+            type="date"
+            value={cliffDate}
+            onChange={(e) => setCliffDate(e.target.value)}
+          />
+
+          <br />
+
+          <input
+            placeholder="Duration (seconds)"
+            value={duration}
+            onChange={(e) => setDuration(e.target.value)}
+          />
+
+          <br />
 
           <label>
-            <input type="checkbox" checked={revocable} onChange={e => setRevocable(e.target.checked)} />
+            <input
+              type="checkbox"
+              checked={revocable}
+              onChange={(e) => setRevocable(e.target.checked)}
+            />{" "}
             Revocable
           </label>
 
-          <br /><br />
+          <br />
+          <br />
+
           <button onClick={handleCreateSchedule} disabled={isPending}>
-            Create Schedule
-          </button>
-
-          <hr />
-
-          <h2>Claim Tokens</h2>
-
-          <input
-            placeholder="Schedule ID"
-            value={scheduleId}
-            onChange={e => setScheduleId(e.target.value)}
-          />
-
-          <p>Claimable: {claimable?.toString() ?? "0"} tokens</p>
-
-          {claimable === 0n && (
-            <p style={{ opacity: 0.7 }}>
-              No tokens available. Vesting may be fully claimed or cliff not reached.
-            </p>
-          )}
-
-          <button onClick={handleClaim} disabled={isPending}>
-            Claim
+            {isPending ? "Creating..." : "Create Schedule"}
           </button>
         </>
       )}
