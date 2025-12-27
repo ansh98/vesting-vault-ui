@@ -1,30 +1,38 @@
+"use client";
+
 import { useReadContract } from "wagmi";
 import { vestingVaultAbi } from "./vestingVaultAbi";
-import { VESTING_VAULT_ADDRESS } from "./contracts";
 
-export function useScheduleCount(beneficiary?: `0x${string}`) {
-  return useReadContract({
-    address: VESTING_VAULT_ADDRESS,
-    abi: vestingVaultAbi,
-    functionName: "getScheduleCount",
-    args: beneficiary ? [beneficiary] : undefined,
-    query: {
-      enabled: !!beneficiary,
-    },
-  });
-}
+export const VESTING_VAULT_ADDRESS =
+  "0xd7cbf62e9aba341fc256226467965008251104f5";
 
-export function useSchedule(
-  beneficiary: `0x${string}` | undefined,
-  id: bigint
+export function useVestingVault(
+  beneficiary?: `0x${string}`,
+  scheduleId?: bigint
 ) {
-  return useReadContract({
+  // Fee (bps)
+  const { data: feeBps } = useReadContract({
     address: VESTING_VAULT_ADDRESS,
     abi: vestingVaultAbi,
-    functionName: "getSchedule",
-    args: beneficiary ? [beneficiary, id] : undefined,
+    functionName: "feeBps",
+  });
+
+  // Claimable tokens
+  const { data: claimable } = useReadContract({
+    address: VESTING_VAULT_ADDRESS,
+    abi: vestingVaultAbi,
+    functionName: "previewClaimable",
+    args:
+      beneficiary && scheduleId !== undefined
+        ? [beneficiary, scheduleId]
+        : undefined,
     query: {
-      enabled: !!beneficiary,
+      enabled: !!beneficiary && scheduleId !== undefined,
     },
   });
+
+  return {
+    feeBps,
+    claimable,
+  };
 }
